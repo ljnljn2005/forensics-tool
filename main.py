@@ -1384,7 +1384,7 @@ class PluginMarketInterface(QWidget):
 class HomeWidget(QWidget):
     def __init__(self, text: str, parent=None):
         super().__init__(parent=parent)
-        self.label = SubtitleLabel("欢迎使用 Linux 映射盘取证工具", self)
+        self.label = SubtitleLabel("欢迎使用综合取证分析工具", self)
         self.label.setAlignment(Qt.AlignCenter)
         self.vBoxLayout = QVBoxLayout(self)
         self.vBoxLayout.addWidget(self.label, 1, Qt.AlignCenter)
