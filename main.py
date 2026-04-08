@@ -179,10 +179,11 @@ class ExtractorInterface(QWidget):
         self.vBoxLayout.addWidget(self.moduleBar)
 
         self.current_module = 'linux'
-        self.moduleBar.setCurrentItem('linux')
 
         self.titleLabel = SubtitleLabel("Linux 映射盘信息提取", self)
         self.vBoxLayout.addWidget(self.titleLabel)
+        # Set default selected module after titleLabel is created to avoid callback using missing attributes
+        self.moduleBar.setCurrentItem('linux')
         
         # Path selection layout
         self.pathLayout = QHBoxLayout()
@@ -196,6 +197,10 @@ class ExtractorInterface(QWidget):
         self.pathLayout.addWidget(self.pathLabel)
         self.pathLayout.addWidget(self.pathLineEdit)
         self.pathLayout.addWidget(self.browseButton)
+        # 添加扫描/加载配置按钮
+        self.scanButton = PushButton("扫描并加载", self)
+        self.scanButton.clicked.connect(self.extract_all)
+        self.pathLayout.addWidget(self.scanButton)
         
         self.vBoxLayout.addLayout(self.pathLayout)
         
@@ -217,31 +222,8 @@ class ExtractorInterface(QWidget):
         # 存放分类对应的 blocks 列表和控件引用
         self.tab_category_lists = {}
 
-        # 插件面板：展示并运行当前模块下的积木（blocks），分为“命令类”与“文件提取”两类
-        self.vBoxLayout.addWidget(SubtitleLabel("模块插件", self))
-        from PySide6.QtWidgets import QTabWidget
-        self.pluginTabWidget = QTabWidget(self)
-        self.commandBlocksList = ListWidget(self)
-        self.fileBlocksList = ListWidget(self)
-        self.commandBlocksList.itemClicked.connect(self.on_block_selected)
-        self.fileBlocksList.itemClicked.connect(self.on_block_selected)
-        self.pluginTabWidget.addTab(self.commandBlocksList, "命令类")
-        self.pluginTabWidget.addTab(self.fileBlocksList, "文件提取")
-        self.vBoxLayout.addWidget(self.pluginTabWidget, 1)
-
-        self.pluginBtnLayout = QHBoxLayout()
-        self.runBlockBtn = PushButton("执行/查看", self)
-        self.runBlockBtn.clicked.connect(self.run_selected_block)
-        self.extractFileBtn = PushButton("导出文件", self)
-        self.extractFileBtn.clicked.connect(self.extract_selected_block)
-        self.pluginBtnLayout.addWidget(self.runBlockBtn)
-        self.pluginBtnLayout.addWidget(self.extractFileBtn)
-        self.pluginBtnLayout.addStretch(1)
-        self.vBoxLayout.addLayout(self.pluginBtnLayout)
-
         # 插件配置文件路径（与插件编辑器共用）
         self.plugins_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ssh_plugins.json')
-        self.load_plugins_for_module()
 
     def on_tab_changed(self, route_key):
         if route_key in self.tab_widgets:
@@ -261,6 +243,11 @@ class ExtractorInterface(QWidget):
             self.pathLineEdit.setText(folder)
 
     def on_module_changed(self, module_key):
+        # 如果界面尚未完成初始化，忽略回调
+        if not hasattr(self, 'titleLabel') or not hasattr(self, 'pathLabel'):
+            self.current_module = module_key
+            return
+
         # 更新当前模块状态和界面文本
         self.current_module = module_key
         if module_key == 'windows':
@@ -287,8 +274,8 @@ class ExtractorInterface(QWidget):
 
     def load_plugins_for_module(self):
         # 读取 plugins 文件并根据当前模块过滤显示
-        self.commandBlocksList.clear()
-        self.fileBlocksList.clear()
+        # This method no longer populates top-level lists in Extractor.
+        # Kept for compatibility but will only ensure plugins_file exists.
         try:
             with open(self.plugins_file, 'r', encoding='utf-8') as f:
                 pdata = json.load(f)
@@ -312,16 +299,8 @@ class ExtractorInterface(QWidget):
                 name = b.get('name', '') if isinstance(b, dict) else ''
                 cmd = b.get('cmd', '') if isinstance(b, dict) else ''
                 btype = b.get('type', '') if isinstance(b, dict) else ''
-                if '文件' in btype or '提取' in btype:
-                    item = QListWidgetItem(self.fileBlocksList)
-                    item.setText(f"{group_name} - {name}")
-                    item.setData(Qt.UserRole, {"group": group_name, "name": name, "cmd": cmd, "type": btype})
-                    self.fileBlocksList.addItem(item)
-                else:
-                    item = QListWidgetItem(self.commandBlocksList)
-                    item.setText(f"{group_name} - {name}")
-                    item.setData(Qt.UserRole, {"group": group_name, "name": name, "cmd": cmd, "type": b.get('type', '') if isinstance(b, dict) else ''})
-                    self.commandBlocksList.addItem(item)
+                # No-op here; per-category lists are populated when creating each category tab
+                pass
 
     def on_block_selected(self, item):
         data = item.data(Qt.UserRole)
@@ -1058,23 +1037,66 @@ class LiveSshInterface(QWidget):
                 tab_name = cmd_info.get("name", f"任务 {i+1}")
                 cmd = cmd_info.get("cmd", "")
                 block_type = cmd_info.get("type", "SSH命令")
-                
-                else:
+
+                # 如果是文件提取类，通过 SSH 读取远程文件并展示
+                if '文件' in block_type or '提取' in block_type:
                     try:
-                        base_path = self.pathLineEdit.text().strip() or os.path.dirname(os.path.abspath(__file__))
-                        target_path = cmd
-                        if not os.path.isabs(target_path):
-                            tp = str(target_path).lstrip('/\\')
-                            target_path = os.path.normpath(os.path.join(base_path, tp))
-                        else:
-                            target_path = os.path.normpath(target_path)
-                        with open(target_path, 'r', encoding='utf-8', errors='ignore') as f:
-                            content = f.read()
-                        self.show_file_viewer(target_path, content)
+                        # 优先使用远程 cat 读取（兼容各种权限和符号链接场景）
+                        stdin, stdout, stderr = self.ssh_client.exec_command(f'cat "{cmd}"')
+                        out = stdout.read()
+                        err = stderr.read()
+                        try:
+                            content = out.decode('utf-8') if isinstance(out, (bytes, bytearray)) else str(out)
+                        except Exception:
+                            content = str(out)
+                        if (not content or content.strip() == '') and err:
+                            try:
+                                errtxt = err.decode('utf-8') if isinstance(err, (bytes, bytearray)) else str(err)
+                            except Exception:
+                                errtxt = str(err)
+                            content = f"[远程读取失败]\n{errtxt}"
+                        self.show_file_viewer(cmd, content)
                     except Exception as e:
                         from qfluentwidgets import InfoBar, InfoBarPosition
-                        InfoBar.error("读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
-                self.ssh_client = None
+                        InfoBar.error("远程读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
+                else:
+                    # 普通命令，执行并将输出追加到日志标签页
+                    try:
+                        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
+                        out = stdout.read()
+                        err = stderr.read()
+                        try:
+                            out_text = out.decode('utf-8') if isinstance(out, (bytes, bytearray)) else str(out)
+                        except Exception:
+                            out_text = str(out)
+                        try:
+                            err_text = err.decode('utf-8') if isinstance(err, (bytes, bytearray)) else str(err)
+                        except Exception:
+                            err_text = str(err)
+                        combined = out_text
+                        if err_text and err_text.strip():
+                            combined += "\n[stderr]\n" + err_text
+                        # 将结果显示在 Log 选项卡
+                        log_widget.setText(log_widget.textEdit.toPlainText() + f"\n=== {tab_name} ===\n{combined}\n")
+                        QApplication.processEvents()
+                    except Exception as e:
+                        from qfluentwidgets import InfoBar, InfoBarPosition
+                        InfoBar.error("命令执行失败", str(e), parent=self, position=InfoBarPosition.TOP)
+            # 关闭 SSH 连接
+            try:
+                self.ssh_client.close()
+            except Exception:
+                pass
+            self.ssh_client = None
+        except Exception as e:
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            InfoBar.error("连接或执行失败", str(e), parent=self, position=InfoBarPosition.TOP)
+            try:
+                if self.ssh_client:
+                    self.ssh_client.close()
+            except Exception:
+                pass
+            self.ssh_client = None
 
 
 class CommandBlockWidget(QWidget):
