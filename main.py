@@ -360,19 +360,18 @@ class ExtractorInterface(QWidget):
                 from qfluentwidgets import InfoBar, InfoBarPosition
                 InfoBar.error("执行失败", str(e), parent=self, position=InfoBarPosition.TOP)
         else:
-            # 视为文件路径，显示前几行
+            # 视为文件路径，显示完整文件内容（可滚动对话框）
             try:
                 base_path = self.pathLineEdit.text().strip() or os.path.dirname(os.path.abspath(__file__))
                 target_path = cmd
                 if not os.path.isabs(target_path):
-                    target_path = os.path.join(base_path, target_path)
+                    tp = str(target_path).lstrip('/\\')
+                    target_path = os.path.normpath(os.path.join(base_path, tp))
+                else:
+                    target_path = os.path.normpath(target_path)
                 with open(target_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    lines = ''.join([next(f) for _ in range(20)])
-                from qfluentwidgets import InfoBar, InfoBarPosition
-                InfoBar.success("文件预览", lines, parent=self, position=InfoBarPosition.TOP)
-            except StopIteration:
-                from qfluentwidgets import InfoBar, InfoBarPosition
-                InfoBar.success("文件预览", "(文件内容较短)", parent=self, position=InfoBarPosition.TOP)
+                    content = f.read()
+                self.show_file_viewer(target_path, content)
             except Exception as e:
                 from qfluentwidgets import InfoBar, InfoBarPosition
                 InfoBar.error("读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
@@ -451,6 +450,26 @@ class ExtractorInterface(QWidget):
         except Exception as e:
             from qfluentwidgets import InfoBar, InfoBarPosition
             InfoBar.error("导出失败", str(e), parent=self, position=InfoBarPosition.TOP)
+
+    def show_file_viewer(self, path, content):
+        # 弹窗显示文件完整内容，支持复制与滚动
+        try:
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"文件预览 - {os.path.basename(path)}")
+            dialog.resize(800, 600)
+            from qfluentwidgets import PlainTextEdit, PrimaryPushButton
+            layout = QVBoxLayout(dialog)
+            viewer = PlainTextEdit(dialog)
+            viewer.setReadOnly(True)
+            viewer.setPlainText(content)
+            layout.addWidget(viewer, 1)
+            btn = PrimaryPushButton("关闭", dialog)
+            btn.clicked.connect(dialog.accept)
+            layout.addWidget(btn)
+            dialog.exec()
+        except Exception:
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            InfoBar.info("文件内容", content[:800], parent=self, position=InfoBarPosition.TOP)
 
     def read_file_content(self, base_path, rel_path):
         # Normalize relative paths: strip leading slashes so joining with base_path works
@@ -1040,25 +1059,21 @@ class LiveSshInterface(QWidget):
                 cmd = cmd_info.get("cmd", "")
                 block_type = cmd_info.get("type", "SSH命令")
                 
-                if cmd:
-                    if block_type == "文件提取":
-                        result = self.exec_sftp_download(self.ssh_client, cmd)
-                    else:
-                        result = self.exec_ssh_command(self.ssh_client, cmd)
-                    route_key = f"tab_{i}"
-                    self.add_tab_for_category(route_key, tab_name, result)
-                    QApplication.processEvents()
-            
-            log_widget.setText(log_widget.textEdit.toPlainText() + "\n\n提取完毕！")
-            
-            # Reconnect terminal if open
-            if self.terminal_window and self.terminal_window.isVisible():
-                self.terminal_window.set_ssh_client(self.ssh_client)
-
-        except Exception as e:
-            log_widget.setText(log_widget.textEdit.toPlainText() + f"\n连接或执行失败:\n{e}")
-            if self.ssh_client:
-                self.ssh_client.close()
+                else:
+                    try:
+                        base_path = self.pathLineEdit.text().strip() or os.path.dirname(os.path.abspath(__file__))
+                        target_path = cmd
+                        if not os.path.isabs(target_path):
+                            tp = str(target_path).lstrip('/\\')
+                            target_path = os.path.normpath(os.path.join(base_path, tp))
+                        else:
+                            target_path = os.path.normpath(target_path)
+                        with open(target_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        self.show_file_viewer(target_path, content)
+                    except Exception as e:
+                        from qfluentwidgets import InfoBar, InfoBarPosition
+                        InfoBar.error("读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
                 self.ssh_client = None
 
 
