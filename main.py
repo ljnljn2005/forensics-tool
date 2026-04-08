@@ -1039,7 +1039,7 @@ class LiveSshInterface(QWidget):
 
 
 class CommandBlockWidget(QWidget):
-    def __init__(self, name="", cmd="", block_type="SSH命令", module="linux", del_callback=None, data_changed_callback=None, parent=None):
+    def __init__(self, name="", cmd="", block_type="SSH命令", module="linux", category="", del_callback=None, data_changed_callback=None, parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 5, 10, 5)
@@ -1056,6 +1056,12 @@ class CommandBlockWidget(QWidget):
         self.moduleCombo.setCurrentText(module if module in ["linux", "windows", "android", "ios"] else "linux")
         self.moduleCombo.setFixedWidth(100)
         
+        # Category 编辑（支持任意文本）
+        self.categoryEdit = LineEdit(self)
+        self.categoryEdit.setPlaceholderText("分类 (例如 network, ssh, system)")
+        self.categoryEdit.setText(category)
+        self.categoryEdit.setFixedWidth(160)
+        
         self.nameEdit = LineEdit(self)
         self.nameEdit.setPlaceholderText("标题")
         self.nameEdit.setText(name)
@@ -1070,6 +1076,7 @@ class CommandBlockWidget(QWidget):
             
         layout.addWidget(self.typeCombo)
         layout.addWidget(self.moduleCombo)
+        layout.addWidget(self.categoryEdit)
         layout.addWidget(self.nameEdit, 1)
         layout.addWidget(self.cmdEdit, 2)
         layout.addWidget(self.delBtn)
@@ -1079,6 +1086,7 @@ class CommandBlockWidget(QWidget):
             self.cmdEdit.textChanged.connect(data_changed_callback)
             self.typeCombo.currentTextChanged.connect(data_changed_callback)
             self.moduleCombo.currentTextChanged.connect(data_changed_callback)
+            self.categoryEdit.textChanged.connect(data_changed_callback)
 
 class BlockListWidget(ListWidget):
     def __init__(self, parent=None):
@@ -1087,10 +1095,10 @@ class BlockListWidget(ListWidget):
         self.setDefaultDropAction(Qt.MoveAction)
         self.setSpacing(5)
 
-    def add_block(self, name="", cmd="", type_="SSH命令", module='linux'):
+    def add_block(self, name="", cmd="", type_="SSH命令", module='linux', category=''):
         item = QListWidgetItem(self)
         item.setSizeHint(self.get_widget_size_hint())
-        item.setData(Qt.UserRole, {"name": name, "cmd": cmd, "type": type_, "module": module})
+        item.setData(Qt.UserRole, {"name": name, "cmd": cmd, "type": type_, "module": module, "category": category})
         self.addItem(item)
         self._bind_widget(item)
 
@@ -1104,12 +1112,12 @@ class BlockListWidget(ListWidget):
         def on_data_changed():
             # Update data in item when lineEdit changed
             if w:
-                item.setData(Qt.UserRole, {"name": w.nameEdit.text(), "cmd": w.cmdEdit.text(), "type": w.typeCombo.currentText(), "module": w.moduleCombo.currentText()})
+                item.setData(Qt.UserRole, {"name": w.nameEdit.text(), "cmd": w.cmdEdit.text(), "type": w.typeCombo.currentText(), "module": w.moduleCombo.currentText(), "category": w.categoryEdit.text()})
 
         def on_del():
             self.takeItem(self.row(item))
 
-        w = CommandBlockWidget(data["name"], data["cmd"], data.get("type", "SSH命令"), data.get("module", "linux"), on_del, on_data_changed, self)
+        w = CommandBlockWidget(data["name"], data["cmd"], data.get("type", "SSH命令"), data.get("module", "linux"), data.get("category", ""), on_del, on_data_changed, self)
         self.setItemWidget(item, w)
 
     def dropEvent(self, event):
@@ -1127,7 +1135,7 @@ class BlockListWidget(ListWidget):
             item = self.item(i)
             data = item.data(Qt.UserRole)
             if data and data["name"].strip() and data["cmd"].strip():
-                cmds.append({"name": data["name"].strip(), "cmd": data["cmd"].strip(), "type": data.get("type", "SSH命令"), "module": data.get("module", "linux")})
+                cmds.append({"name": data["name"].strip(), "cmd": data["cmd"].strip(), "type": data.get("type", "SSH命令"), "module": data.get("module", "linux"), "category": data.get("category", "")})
         return cmds
 
     def clear_blocks(self):
@@ -1493,7 +1501,8 @@ class PluginEditorInterface(QWidget):
             cmd = ""
         # default new block belongs to current module
         module = getattr(self, 'current_module', 'linux')
-        self.blockList.add_block(name, cmd, "SSH命令", module)
+        # 新建积木默认分类留空，可在编辑器内填写
+        self.blockList.add_block(name, cmd, "SSH命令", module, "")
 
     def on_plugin_selected(self, item):
         name = item.text()
@@ -1512,7 +1521,7 @@ class PluginEditorInterface(QWidget):
             self.descEdit.setText("")
             
         for c in cmds:
-            self.blockList.add_block(c.get("name", ""), c.get("cmd", ""), c.get("type", "SSH命令"), c.get("module", getattr(self, 'current_module', 'linux')))
+            self.blockList.add_block(c.get("name", ""), c.get("cmd", ""), c.get("type", "SSH命令"), c.get("module", getattr(self, 'current_module', 'linux')), c.get("category", ""))
 
     def save_plugin(self):
         from PySide6.QtCore import Qt
