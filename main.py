@@ -220,6 +220,26 @@ class ExtractorInterface(QWidget):
         self.tab_widgets = {}
         self.tabBar.currentItemChanged.connect(self.on_tab_changed)
 
+        # 插件面板：展示并运行当前模块下的积木（blocks）
+        self.vBoxLayout.addWidget(SubtitleLabel("模块插件", self))
+        self.pluginBlocksList = ListWidget(self)
+        self.pluginBlocksList.itemClicked.connect(self.on_block_selected)
+        self.vBoxLayout.addWidget(self.pluginBlocksList, 1)
+
+        self.pluginBtnLayout = QHBoxLayout()
+        self.runBlockBtn = PushButton("执行/查看", self)
+        self.runBlockBtn.clicked.connect(self.run_selected_block)
+        self.extractFileBtn = PushButton("导出文件", self)
+        self.extractFileBtn.clicked.connect(self.extract_selected_block)
+        self.pluginBtnLayout.addWidget(self.runBlockBtn)
+        self.pluginBtnLayout.addWidget(self.extractFileBtn)
+        self.pluginBtnLayout.addStretch(1)
+        self.vBoxLayout.addLayout(self.pluginBtnLayout)
+
+        # 插件配置文件路径（与插件编辑器共用）
+        self.plugins_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ssh_plugins.json')
+        self.load_plugins_for_module()
+
     def on_tab_changed(self, route_key):
         if route_key in self.tab_widgets:
             self.stackedWidget.setCurrentWidget(self.tab_widgets[route_key])
@@ -256,6 +276,112 @@ class ExtractorInterface(QWidget):
             self.titleLabel.setText('iOS 设备/备份 信息提取')
             self.pathLabel.setText('镜像或备份路径:')
             self.pathLineEdit.setPlaceholderText(r"例如 /path/to/ios_backup 或 C:\\Users\\you\\Apple\\MobileSync\\Backup")
+        # 切换模块时刷新模块插件
+        try:
+            self.load_plugins_for_module()
+        except Exception:
+            pass
+
+    def load_plugins_for_module(self):
+        # 读取 plugins 文件并根据当前模块过滤显示
+        self.pluginBlocksList.clear()
+        try:
+            with open(self.plugins_file, 'r', encoding='utf-8') as f:
+                pdata = json.load(f)
+        except Exception:
+            pdata = {}
+
+        # pdata: dict of groups -> list(blocks) or dict
+        for group_name, group_data in pdata.items():
+            blocks = []
+            if isinstance(group_data, dict):
+                blocks = group_data.get('blocks', [])
+            elif isinstance(group_data, list):
+                blocks = group_data
+            for b in blocks:
+                # block may specify module target
+                target = b.get('module') if isinstance(b, dict) else None
+                # if no explicit module, accept for linux by default
+                cur = getattr(self, 'current_module', 'linux')
+                if target and target != cur:
+                    continue
+                name = b.get('name', '') if isinstance(b, dict) else ''
+                cmd = b.get('cmd', '') if isinstance(b, dict) else ''
+                item = QListWidgetItem(self.pluginBlocksList)
+                item.setText(f"{group_name} - {name}")
+                item.setData(Qt.UserRole, {"group": group_name, "name": name, "cmd": cmd, "type": b.get('type', '') if isinstance(b, dict) else ''})
+                self.pluginBlocksList.addItem(item)
+
+    def on_block_selected(self, item):
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+        # 简短提示当前选中
+        from qfluentwidgets import InfoBar, InfoBarPosition
+        InfoBar.info("选中积木", f"{data.get('group')} -> {data.get('name')}", parent=self, position=InfoBarPosition.TOP)
+
+    def run_selected_block(self):
+        item = self.pluginBlocksList.currentItem()
+        if not item:
+            return
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+        cmd = data.get('cmd', '')
+        btype = data.get('type', '')
+        # 如果是命令类，则执行并展示输出；如果是文件提取类，尝试读取并展示第一段内容
+        if '命令' in btype or 'SSH' in btype or (not btype and cmd):
+            try:
+                import subprocess
+                res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                out = (res.stdout or '') + (res.stderr or '')
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.success("命令输出", out[:800], parent=self, position=InfoBarPosition.TOP)
+            except Exception as e:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.error("执行失败", str(e), parent=self, position=InfoBarPosition.TOP)
+        else:
+            # 视为文件路径，显示前几行
+            try:
+                base_path = self.pathLineEdit.text().strip() or os.path.dirname(os.path.abspath(__file__))
+                target_path = cmd
+                if not os.path.isabs(target_path):
+                    target_path = os.path.join(base_path, target_path)
+                with open(target_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = ''.join([next(f) for _ in range(20)])
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.success("文件预览", lines, parent=self, position=InfoBarPosition.TOP)
+            except StopIteration:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.success("文件预览", "(文件内容较短)", parent=self, position=InfoBarPosition.TOP)
+            except Exception as e:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.error("读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
+
+    def extract_selected_block(self):
+        item = self.pluginBlocksList.currentItem()
+        if not item:
+            return
+        data = item.data(Qt.UserRole)
+        cmd = data.get('cmd', '')
+        # 只在文件路径类型支持导出
+        try:
+            base_path = self.pathLineEdit.text().strip() or os.path.dirname(os.path.abspath(__file__))
+            target_path = cmd
+            if not os.path.isabs(target_path):
+                target_path = os.path.join(base_path, target_path)
+            if not os.path.exists(target_path):
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.error("导出失败", "目标文件不存在", parent=self, position=InfoBarPosition.TOP)
+                return
+            import shutil, tempfile
+            dest = os.path.join(tempfile.gettempdir(), os.path.basename(target_path))
+            shutil.copy2(target_path, dest)
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            InfoBar.success("导出成功", f"已导出到: {dest}", parent=self, position=InfoBarPosition.TOP)
+        except Exception as e:
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            InfoBar.error("导出失败", str(e), parent=self, position=InfoBarPosition.TOP)
 
     def read_file_content(self, base_path, rel_path):
         full_path = os.path.join(base_path, rel_path)
