@@ -199,14 +199,9 @@ class ExtractorInterface(QWidget):
         
         self.vBoxLayout.addLayout(self.pathLayout)
         
-        # Extractor Action
+        # 提取器动作区（已移除一键提取，使用每个分类内的启动按钮）
         self.btnLayout = QHBoxLayout()
         self.btnLayout.setSpacing(10)
-        self.extractAllButton = PrimaryPushButton("一键提取", self)
-        self.extractAllButton.clicked.connect(self.extract_all)
-        
-        self.btnLayout.addWidget(self.extractAllButton)
-        self.btnLayout.addStretch(1)
         self.vBoxLayout.addLayout(self.btnLayout)
         
         # Segmented Tabs for Categories
@@ -219,6 +214,8 @@ class ExtractorInterface(QWidget):
         # Store route_key mapping to widget
         self.tab_widgets = {}
         self.tabBar.currentItemChanged.connect(self.on_tab_changed)
+        # 存放分类对应的 blocks 列表和控件引用
+        self.tab_category_lists = {}
 
         # 插件面板：展示并运行当前模块下的积木（blocks），分为“命令类”与“文件提取”两类
         self.vBoxLayout.addWidget(SubtitleLabel("模块插件", self))
@@ -380,6 +377,40 @@ class ExtractorInterface(QWidget):
                 from qfluentwidgets import InfoBar, InfoBarPosition
                 InfoBar.error("读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
 
+    def run_block_item(self, item):
+        # reuse run logic for a QListWidgetItem
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+        cmd = data.get('cmd', '')
+        btype = data.get('type', '')
+        if '命令' in btype or 'SSH' in btype or (not btype and cmd):
+            try:
+                import subprocess
+                res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                out = (res.stdout or '') + (res.stderr or '')
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.success("命令输出", out[:800], parent=self, position=InfoBarPosition.TOP)
+            except Exception as e:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.error("执行失败", str(e), parent=self, position=InfoBarPosition.TOP)
+        else:
+            try:
+                base_path = self.pathLineEdit.text().strip() or os.path.dirname(os.path.abspath(__file__))
+                target_path = cmd
+                if not os.path.isabs(target_path):
+                    target_path = os.path.join(base_path, target_path)
+                with open(target_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = ''.join([next(f) for _ in range(20)])
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.success("文件预览", lines, parent=self, position=InfoBarPosition.TOP)
+            except StopIteration:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.success("文件预览", "(文件内容较短)", parent=self, position=InfoBarPosition.TOP)
+            except Exception as e:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.error("读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
+
     def extract_selected_block(self):
         # 导出只对文件提取 Tab 生效
         if getattr(self, 'pluginTabWidget', None) and self.pluginTabWidget.currentIndex() == 1:
@@ -450,8 +481,11 @@ class ExtractorInterface(QWidget):
         return SearchableTextEdit(self)
 
     def add_tab_for_category(self, route_key, tab_name, files_dict):
+        # 每个分类使用组合控件：文本查看 + 插件搜索与列表 + 启动提取按钮
+        container = QWidget(self)
+        layout = QVBoxLayout(container)
+
         searchable_edit = self._create_text_edit()
-        
         if not files_dict:
             searchable_edit.setText("未找到相关配置文件。")
         else:
@@ -459,10 +493,78 @@ class ExtractorInterface(QWidget):
             for name, content in files_dict.items():
                 output_text += f"{'='*30} {name} {'='*30}\n{content}\n\n"
             searchable_edit.setText(output_text)
-            
-        self.stackedWidget.addWidget(searchable_edit)
-        self.tab_widgets[route_key] = searchable_edit
+
+        layout.addWidget(searchable_edit, 3)
+
+        # 插件区域：搜索框 + 启动按钮 + 列表
+        searchRow = QHBoxLayout()
+        searchEdit = LineEdit(self)
+        searchEdit.setPlaceholderText("搜索本分类插件...")
+        searchBtn = PushButton("筛选", self)
+        startBtn = PushButton("启动提取", self)
+        searchRow.addWidget(searchEdit, 1)
+        searchRow.addWidget(searchBtn)
+        searchRow.addWidget(startBtn)
+        layout.addLayout(searchRow)
+
+        blocksList = ListWidget(self)
+        layout.addWidget(SubtitleLabel("相关插件", self))
+        layout.addWidget(blocksList, 1)
+
+        # 将组合控件加入堆栈并保存引用
+        self.stackedWidget.addWidget(container)
+        self.tab_widgets[route_key] = container
+        self.tab_category_lists[route_key] = {
+            'viewer': searchable_edit,
+            'blocks_list': blocksList,
+            'search_edit': searchEdit,
+            'start_btn': startBtn
+        }
         self.tabBar.addItem(route_key, tab_name)
+
+        # 填充该分类对应的插件（根据 plugins_file 中的 category 字段或 module匹配）
+        try:
+            with open(self.plugins_file, 'r', encoding='utf-8') as f:
+                pdata = json.load(f)
+        except Exception:
+            pdata = {}
+
+        cur_mod = getattr(self, 'current_module', 'linux')
+        for group_name, group_data in pdata.items():
+            blocks = group_data.get('blocks', []) if isinstance(group_data, dict) else group_data
+            for b in blocks:
+                b_cat = b.get('category') if isinstance(b, dict) else None
+                b_mod = b.get('module') if isinstance(b, dict) else None
+                # 仅显示与当前分类或未指定分类的项
+                if b_cat and b_cat != route_key:
+                    continue
+                if b_mod and b_mod != cur_mod:
+                    continue
+                name = b.get('name', '')
+                cmd = b.get('cmd', '')
+                btype = b.get('type', '')
+                it = QListWidgetItem(blocksList)
+                it.setText(f"{group_name} - {name}")
+                it.setData(Qt.UserRole, {"group": group_name, "name": name, "cmd": cmd, "type": btype})
+                blocksList.addItem(it)
+
+        # 绑定筛选和启动动作
+        def do_filter():
+            kw = searchEdit.text().strip()
+            for i in range(blocksList.count()):
+                it = blocksList.item(i)
+                txt = it.text()
+                it.setHidden(bool(kw) and kw.lower() not in txt.lower())
+
+        def do_start():
+            it = blocksList.currentItem()
+            if not it:
+                return
+            self.run_block_item(it)
+
+        searchBtn.clicked.connect(do_filter)
+        startBtn.clicked.connect(do_start)
+        blocksList.itemClicked.connect(lambda it: None)
 
     def extract_all(self):
         base_path = self.pathLineEdit.text().strip()
