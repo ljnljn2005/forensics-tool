@@ -968,10 +968,29 @@ class PluginEditorInterface(QWidget):
 
         self.leftPanel = QVBoxLayout()
         self.leftPanel.addWidget(SubtitleLabel("保存的插件", self))
-        
+
+        # 搜索栏：可搜索插件内容和目录中文件内容
+        self.searchLayout = QHBoxLayout()
+        self.searchEdit = LineEdit(self)
+        self.searchEdit.setPlaceholderText("搜索插件或目录内容...")
+        self.searchBtn = PushButton("搜索", self)
+        self.searchBtn.clicked.connect(self.perform_search)
+        self.chooseDirBtn = PushButton("选择目录", self)
+        self.chooseDirBtn.clicked.connect(self.choose_search_dir)
+        self.searchLayout.addWidget(self.searchEdit, 1)
+        self.searchLayout.addWidget(self.searchBtn)
+        self.searchLayout.addWidget(self.chooseDirBtn)
+        self.leftPanel.addLayout(self.searchLayout)
+
         self.pluginList = ListWidget(self)
         self.pluginList.itemClicked.connect(self.on_plugin_selected)
         self.leftPanel.addWidget(self.pluginList)
+
+        # 搜索结果列表（展示插件匹配或文件匹配）
+        self.searchResults = ListWidget(self)
+        self.searchResults.itemClicked.connect(self.on_search_result_clicked)
+        self.leftPanel.addWidget(SubtitleLabel("搜索结果", self))
+        self.leftPanel.addWidget(self.searchResults, 1)
         
         self.leftBtnLayout = QHBoxLayout()
         self.newPluginBtn = PushButton("新建", self)
@@ -1025,6 +1044,79 @@ class PluginEditorInterface(QWidget):
 
         self.hBoxLayout.addLayout(self.rightPanel, 3)
         self.load_plugins()
+
+        # 默认搜索目录为项目根
+        self.search_dir = os.path.dirname(os.path.abspath(__file__))
+
+    def choose_search_dir(self):
+        from PySide6.QtWidgets import QFileDialog
+        d = QFileDialog.getExistingDirectory(self, "选择要搜索的目录", self.search_dir)
+        if d:
+            self.search_dir = d
+
+    def perform_search(self):
+        import os
+        keyword = self.searchEdit.text().strip()
+        self.searchResults.clear()
+        if not keyword:
+            return
+
+        # 1) 在插件配置组中搜索
+        for plugin_name, pdata in self.plugins_data.items():
+            # pdata 可能是 dict 或 list
+            blocks = []
+            if isinstance(pdata, dict):
+                blocks = pdata.get('blocks', [])
+            elif isinstance(pdata, list):
+                blocks = pdata
+            for b in blocks:
+                name = b.get('name', '')
+                cmd = b.get('cmd', '')
+                desc = b.get('type', '')
+                if keyword in name or keyword in cmd or keyword in desc:
+                    item = QListWidgetItem(self.searchResults)
+                    item.setText(f"插件: {plugin_name} -> {name}")
+                    item.setData(Qt.UserRole, {"type": "plugin", "plugin": plugin_name, "block": name})
+                    self.searchResults.addItem(item)
+
+        # 2) 在选定目录中递归搜索文件内容（只搜索文本文件，略过大文件）
+        max_file_size = 2 * 1024 * 1024
+        for root, dirs, files in os.walk(self.search_dir):
+            for fn in files:
+                fp = os.path.join(root, fn)
+                try:
+                    if os.path.getsize(fp) > max_file_size:
+                        continue
+                    with open(fp, 'r', encoding='utf-8', errors='ignore') as f:
+                        for i, line in enumerate(f, 1):
+                            if keyword in line:
+                                snippet = line.strip()
+                                display = f"文件: {fp} (L{i}) -> {snippet[:200]}"
+                                item = QListWidgetItem(self.searchResults)
+                                item.setText(display)
+                                item.setData(Qt.UserRole, {"type": "file", "path": fp, "line": i, "snippet": snippet})
+                                self.searchResults.addItem(item)
+                                break
+                except Exception:
+                    continue
+
+    def on_search_result_clicked(self, item):
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+        if data.get('type') == 'plugin':
+            plugin = data.get('plugin')
+            # 选中并展开插件
+            items = self.pluginList.findItems(plugin, Qt.MatchExactly)
+            if items:
+                self.pluginList.setCurrentItem(items[0])
+                self.on_plugin_selected(items[0])
+        elif data.get('type') == 'file':
+            # 打开一个简单的查看器对话框显示匹配行
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            snippet = data.get('snippet', '')
+            path = data.get('path')
+            InfoBar.success("文件匹配", f"{path}\n{snippet}", parent=self, position=InfoBarPosition.TOP)
 
     def load_plugins(self):
         import os, json
