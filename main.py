@@ -220,11 +220,17 @@ class ExtractorInterface(QWidget):
         self.tab_widgets = {}
         self.tabBar.currentItemChanged.connect(self.on_tab_changed)
 
-        # 插件面板：展示并运行当前模块下的积木（blocks）
+        # 插件面板：展示并运行当前模块下的积木（blocks），分为“命令类”与“文件提取”两类
         self.vBoxLayout.addWidget(SubtitleLabel("模块插件", self))
-        self.pluginBlocksList = ListWidget(self)
-        self.pluginBlocksList.itemClicked.connect(self.on_block_selected)
-        self.vBoxLayout.addWidget(self.pluginBlocksList, 1)
+        from PySide6.QtWidgets import QTabWidget
+        self.pluginTabWidget = QTabWidget(self)
+        self.commandBlocksList = ListWidget(self)
+        self.fileBlocksList = ListWidget(self)
+        self.commandBlocksList.itemClicked.connect(self.on_block_selected)
+        self.fileBlocksList.itemClicked.connect(self.on_block_selected)
+        self.pluginTabWidget.addTab(self.commandBlocksList, "命令类")
+        self.pluginTabWidget.addTab(self.fileBlocksList, "文件提取")
+        self.vBoxLayout.addWidget(self.pluginTabWidget, 1)
 
         self.pluginBtnLayout = QHBoxLayout()
         self.runBlockBtn = PushButton("执行/查看", self)
@@ -284,7 +290,8 @@ class ExtractorInterface(QWidget):
 
     def load_plugins_for_module(self):
         # 读取 plugins 文件并根据当前模块过滤显示
-        self.pluginBlocksList.clear()
+        self.commandBlocksList.clear()
+        self.fileBlocksList.clear()
         try:
             with open(self.plugins_file, 'r', encoding='utf-8') as f:
                 pdata = json.load(f)
@@ -307,10 +314,17 @@ class ExtractorInterface(QWidget):
                     continue
                 name = b.get('name', '') if isinstance(b, dict) else ''
                 cmd = b.get('cmd', '') if isinstance(b, dict) else ''
-                item = QListWidgetItem(self.pluginBlocksList)
-                item.setText(f"{group_name} - {name}")
-                item.setData(Qt.UserRole, {"group": group_name, "name": name, "cmd": cmd, "type": b.get('type', '') if isinstance(b, dict) else ''})
-                self.pluginBlocksList.addItem(item)
+                btype = b.get('type', '') if isinstance(b, dict) else ''
+                if '文件' in btype or '提取' in btype:
+                    item = QListWidgetItem(self.fileBlocksList)
+                    item.setText(f"{group_name} - {name}")
+                    item.setData(Qt.UserRole, {"group": group_name, "name": name, "cmd": cmd, "type": btype})
+                    self.fileBlocksList.addItem(item)
+                else:
+                    item = QListWidgetItem(self.commandBlocksList)
+                    item.setText(f"{group_name} - {name}")
+                    item.setData(Qt.UserRole, {"group": group_name, "name": name, "cmd": cmd, "type": b.get('type', '') if isinstance(b, dict) else ''})
+                    self.commandBlocksList.addItem(item)
 
     def on_block_selected(self, item):
         data = item.data(Qt.UserRole)
@@ -321,7 +335,15 @@ class ExtractorInterface(QWidget):
         InfoBar.info("选中积木", f"{data.get('group')} -> {data.get('name')}", parent=self, position=InfoBarPosition.TOP)
 
     def run_selected_block(self):
-        item = self.pluginBlocksList.currentItem()
+        # 根据当前 tab 选择对应列表的当前项
+        if getattr(self, 'pluginTabWidget', None):
+            cur_index = self.pluginTabWidget.currentIndex()
+            if cur_index == 0:
+                item = self.commandBlocksList.currentItem()
+            else:
+                item = self.fileBlocksList.currentItem()
+        else:
+            item = self.pluginBlocksList.currentItem()
         if not item:
             return
         data = item.data(Qt.UserRole)
@@ -359,7 +381,16 @@ class ExtractorInterface(QWidget):
                 InfoBar.error("读取失败", str(e), parent=self, position=InfoBarPosition.TOP)
 
     def extract_selected_block(self):
-        item = self.pluginBlocksList.currentItem()
+        # 导出只对文件提取 Tab 生效
+        if getattr(self, 'pluginTabWidget', None) and self.pluginTabWidget.currentIndex() == 1:
+            item = self.fileBlocksList.currentItem()
+        elif getattr(self, 'pluginTabWidget', None) and self.pluginTabWidget.currentIndex() == 0:
+            # 当前为命令类，提示不可导出
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            InfoBar.warning("不可导出", "当前为命令类积木，无法导出文件。请切换到“文件提取”标签。", parent=self, position=InfoBarPosition.TOP)
+            return
+        else:
+            item = self.pluginBlocksList.currentItem()
         if not item:
             return
         data = item.data(Qt.UserRole)
@@ -906,7 +937,7 @@ class LiveSshInterface(QWidget):
 
 
 class CommandBlockWidget(QWidget):
-    def __init__(self, name="", cmd="", block_type="SSH命令", del_callback=None, data_changed_callback=None, parent=None):
+    def __init__(self, name="", cmd="", block_type="SSH命令", module="linux", del_callback=None, data_changed_callback=None, parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 5, 10, 5)
@@ -916,6 +947,12 @@ class CommandBlockWidget(QWidget):
         self.typeCombo.addItems(["SSH命令", "文件提取"])
         self.typeCombo.setCurrentText(block_type if block_type in ["SSH命令", "文件提取"] else "SSH命令")
         self.typeCombo.setFixedWidth(100)
+        
+        # Module selector (Windows/Linux/Android/iOS)
+        self.moduleCombo = ComboBox(self)
+        self.moduleCombo.addItems(["linux", "windows", "android", "ios"])
+        self.moduleCombo.setCurrentText(module if module in ["linux", "windows", "android", "ios"] else "linux")
+        self.moduleCombo.setFixedWidth(100)
         
         self.nameEdit = LineEdit(self)
         self.nameEdit.setPlaceholderText("标题")
@@ -930,6 +967,7 @@ class CommandBlockWidget(QWidget):
             self.delBtn.clicked.connect(del_callback)
             
         layout.addWidget(self.typeCombo)
+        layout.addWidget(self.moduleCombo)
         layout.addWidget(self.nameEdit, 1)
         layout.addWidget(self.cmdEdit, 2)
         layout.addWidget(self.delBtn)
@@ -938,6 +976,7 @@ class CommandBlockWidget(QWidget):
             self.nameEdit.textChanged.connect(data_changed_callback)
             self.cmdEdit.textChanged.connect(data_changed_callback)
             self.typeCombo.currentTextChanged.connect(data_changed_callback)
+            self.moduleCombo.currentTextChanged.connect(data_changed_callback)
 
 class BlockListWidget(ListWidget):
     def __init__(self, parent=None):
@@ -946,10 +985,10 @@ class BlockListWidget(ListWidget):
         self.setDefaultDropAction(Qt.MoveAction)
         self.setSpacing(5)
 
-    def add_block(self, name="", cmd="", type_="SSH命令"):
+    def add_block(self, name="", cmd="", type_="SSH命令", module='linux'):
         item = QListWidgetItem(self)
         item.setSizeHint(self.get_widget_size_hint())
-        item.setData(Qt.UserRole, {"name": name, "cmd": cmd, "type": type_})
+        item.setData(Qt.UserRole, {"name": name, "cmd": cmd, "type": type_, "module": module})
         self.addItem(item)
         self._bind_widget(item)
 
@@ -963,12 +1002,12 @@ class BlockListWidget(ListWidget):
         def on_data_changed():
             # Update data in item when lineEdit changed
             if w:
-                item.setData(Qt.UserRole, {"name": w.nameEdit.text(), "cmd": w.cmdEdit.text(), "type": w.typeCombo.currentText()})
+                item.setData(Qt.UserRole, {"name": w.nameEdit.text(), "cmd": w.cmdEdit.text(), "type": w.typeCombo.currentText(), "module": w.moduleCombo.currentText()})
 
         def on_del():
             self.takeItem(self.row(item))
 
-        w = CommandBlockWidget(data["name"], data["cmd"], data.get("type", "SSH命令"), on_del, on_data_changed, self)
+        w = CommandBlockWidget(data["name"], data["cmd"], data.get("type", "SSH命令"), data.get("module", "linux"), on_del, on_data_changed, self)
         self.setItemWidget(item, w)
 
     def dropEvent(self, event):
@@ -986,7 +1025,7 @@ class BlockListWidget(ListWidget):
             item = self.item(i)
             data = item.data(Qt.UserRole)
             if data and data["name"].strip() and data["cmd"].strip():
-                cmds.append({"name": data["name"].strip(), "cmd": data["cmd"].strip(), "type": data.get("type", "SSH命令")})
+                cmds.append({"name": data["name"].strip(), "cmd": data["cmd"].strip(), "type": data.get("type", "SSH命令"), "module": data.get("module", "linux")})
         return cmds
 
     def clear_blocks(self):
@@ -1350,7 +1389,9 @@ class PluginEditorInterface(QWidget):
             name = ""
         if isinstance(cmd, bool):
             cmd = ""
-        self.blockList.add_block(name, cmd)
+        # default new block belongs to current module
+        module = getattr(self, 'current_module', 'linux')
+        self.blockList.add_block(name, cmd, "SSH命令", module)
 
     def on_plugin_selected(self, item):
         name = item.text()
@@ -1369,7 +1410,7 @@ class PluginEditorInterface(QWidget):
             self.descEdit.setText("")
             
         for c in cmds:
-            self.blockList.add_block(c.get("name", ""), c.get("cmd", ""), c.get("type", "SSH命令"))
+            self.blockList.add_block(c.get("name", ""), c.get("cmd", ""), c.get("type", "SSH命令"), c.get("module", getattr(self, 'current_module', 'linux')))
 
     def save_plugin(self):
         from PySide6.QtCore import Qt
