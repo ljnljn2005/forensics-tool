@@ -169,6 +169,18 @@ class ExtractorInterface(QWidget):
         self.vBoxLayout.setContentsMargins(24, 24, 24, 24)
         self.vBoxLayout.setSpacing(16)
         
+        # 模块选择：Windows / Linux / Android / iOS
+        self.moduleBar = SegmentedWidget(self)
+        self.moduleBar.addItem('windows', 'Windows分析')
+        self.moduleBar.addItem('linux', 'Linux分析')
+        self.moduleBar.addItem('android', 'Android分析')
+        self.moduleBar.addItem('ios', 'iOS分析')
+        self.moduleBar.currentItemChanged.connect(self.on_module_changed)
+        self.vBoxLayout.addWidget(self.moduleBar)
+
+        self.current_module = 'linux'
+        self.moduleBar.setCurrentItem('linux')
+
         self.titleLabel = SubtitleLabel("Linux 映射盘信息提取", self)
         self.vBoxLayout.addWidget(self.titleLabel)
         
@@ -176,7 +188,8 @@ class ExtractorInterface(QWidget):
         self.pathLayout = QHBoxLayout()
         self.pathLabel = BodyLabel("映射磁盘根路径:", self)
         self.pathLineEdit = LineEdit(self)
-        self.pathLineEdit.setPlaceholderText(r"例如 C:\hlnet\3-1774527990\ubuntu-vg(...)\分区0")
+        # 根据模块动态提示路径示例
+        self.pathLineEdit.setPlaceholderText(r"例如 /mnt/mapped_drive 或 C:\\path\\to\\image")
         self.browseButton = PushButton("浏览...", self)
         self.browseButton.clicked.connect(self.browse_folder)
         
@@ -212,9 +225,37 @@ class ExtractorInterface(QWidget):
             self.stackedWidget.setCurrentWidget(self.tab_widgets[route_key])
 
     def browse_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择被映射的Linux根目录")
+        # 根据当前模块调整对话框标题
+        title_map = {
+            'windows': '选择 Windows 磁盘或镜像目录',
+            'linux': '选择被映射的 Linux 根目录',
+            'android': '选择 Android 设备挂载或导出目录',
+            'ios': '选择 iOS 镜像或备份目录'
+        }
+        title = title_map.get(getattr(self, 'current_module', 'linux'), '选择目录')
+        folder = QFileDialog.getExistingDirectory(self, title)
         if folder:
             self.pathLineEdit.setText(folder)
+
+    def on_module_changed(self, module_key):
+        # 更新当前模块状态和界面文本
+        self.current_module = module_key
+        if module_key == 'windows':
+            self.titleLabel.setText('Windows 映射盘/镜像 信息提取')
+            self.pathLabel.setText('磁盘或镜像路径:')
+            self.pathLineEdit.setPlaceholderText(r"例如 C:\\path\\to\\image 或 \\server\\share")
+        elif module_key == 'linux':
+            self.titleLabel.setText('Linux 映射盘信息提取')
+            self.pathLabel.setText('映射磁盘根路径:')
+            self.pathLineEdit.setPlaceholderText(r"例如 /mnt/mapped_drive 或 /media/ubuntu.img")
+        elif module_key == 'android':
+            self.titleLabel.setText('Android 设备信息提取')
+            self.pathLabel.setText('设备挂载或导出目录:')
+            self.pathLineEdit.setPlaceholderText(r"例如 /sdcard/ 或 D:\\android_export")
+        elif module_key == 'ios':
+            self.titleLabel.setText('iOS 设备/备份 信息提取')
+            self.pathLabel.setText('镜像或备份路径:')
+            self.pathLineEdit.setPlaceholderText(r"例如 /path/to/ios_backup 或 C:\\Users\\you\\Apple\\MobileSync\\Backup")
 
     def read_file_content(self, base_path, rel_path):
         full_path = os.path.join(base_path, rel_path)
@@ -279,7 +320,16 @@ class ExtractorInterface(QWidget):
             
         if not base_path or not os.path.exists(base_path):
             text_edit = self._create_text_edit()
-            text_edit.setText("错误: 无效路径。请选择或输入一个存在的映射盘目录。")
+            # 根据当前模块给出更合适的错误提示
+            if getattr(self, 'current_module', 'linux') == 'windows':
+                msg = "错误: 无效路径。请选择或输入一个存在的 Windows 磁盘/镜像路径。"
+            elif getattr(self, 'current_module', 'linux') == 'android':
+                msg = "错误: 无效路径。请选择或输入一个存在的 Android 设备挂载或导出目录。"
+            elif getattr(self, 'current_module', 'linux') == 'ios':
+                msg = "错误: 无效路径。请选择或输入一个存在的 iOS 镜像或备份路径。"
+            else:
+                msg = "错误: 无效路径。请选择或输入一个存在的提取路径。"
+            text_edit.setText(msg)
             self.stackedWidget.addWidget(text_edit)
             self.tab_widgets["错误"] = text_edit
             self.tabBar.addItem("错误", "错误信息")
