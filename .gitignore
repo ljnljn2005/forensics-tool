@@ -6,3 +6,9 @@ __pycache__/
 downloads/
 settings/app_settings.json
 venv/
+plugins/
+*.zip
+run_log.txt
+target/
+patch_*.py
+settings/
