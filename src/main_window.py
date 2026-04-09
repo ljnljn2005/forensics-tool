@@ -192,6 +192,12 @@ class SettingInterface(QWidget):
         self.apiKeyEdit = LineEdit(self)
         self.apiKeyEdit.setPlaceholderText("输入 API Key (保存在本地配置文件)")
         self.apiKeyEdit.setFixedWidth(360)
+        # 隐藏 API Key 显示
+        try:
+            from PySide6.QtWidgets import QLineEdit
+            self.apiKeyEdit.setEchoMode(QLineEdit.Password)
+        except Exception:
+            pass
         self.modelLabel = BodyLabel("模型:", self)
         self.modelEdit = LineEdit(self)
         self.modelEdit.setPlaceholderText("例如: gpt-4o-mini 或 gpt-3.5-turbo")
@@ -211,6 +217,7 @@ class SettingInterface(QWidget):
         self.marketLayout.addWidget(self.marketRepoEdit)
         self.vBoxLayout.addLayout(self.marketLayout)
         self.saveBtn = PushButton("保存设置", self)
+        self.saveBtn.clicked.connect(self.save_settings)
         self.vBoxLayout.addWidget(self.saveBtn)
         self.vBoxLayout.addStretch(1)
         # load saved settings
