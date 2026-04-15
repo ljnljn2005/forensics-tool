@@ -10,6 +10,7 @@ from .widgets import SearchableTextEdit
 from .ai_interface import AiInterface
 from .constants import get_app_proxy, get_app_settings, save_app_settings
 import paramiko
+from .local_terminal import LocalTerminalInterface
 
 
 class HomeWidget(QWidget):
@@ -262,6 +263,8 @@ class MainWindow(FluentWindow):
         self.searchInterface.setObjectName('searchInterface')
         self.aiInterface = AiInterface(self)
         self.aiInterface.setObjectName('aiInterface')
+        self.localTerminalInterface = LocalTerminalInterface(self)
+        self.localTerminalInterface.setObjectName('localTerminalInterface')
         self.settingInterface = SettingInterface(self)
         self.settingInterface.setObjectName('settingInterface')
 
@@ -283,6 +286,7 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.liveSshInterface, FluentIcon.GLOBE, '动态取证 (SSH)')
         self.addSubInterface(self.pluginEditorInterface, FluentIcon.CALENDAR, '提取插件编辑')
         self.addSubInterface(self.pluginMarketInterface, FluentIcon.MARKET, '插件市场')
+        self.addSubInterface(self.localTerminalInterface, FluentIcon.DOCUMENT, '本地终端')
         self.addSubInterface(self.searchInterface, FluentIcon.SEARCH, '全局搜索')
         self.addSubInterface(self.aiInterface, FluentIcon.SEARCH, 'AI 分析')
         self.addSubInterface(self.settingInterface, FluentIcon.SETTING, '设置')

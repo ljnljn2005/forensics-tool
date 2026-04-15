@@ -106,7 +106,7 @@ class PluginEditorInterface(QWidget):
         self.moduleLayout.addWidget(BodyLabel("目标平台: "))
         self.moduleSelector = ComboBox(self)
         # common platforms
-        for m in ("linux", "android", "windows", "macos", "all"):
+        for m in ("linux", "android", "windows", "macos", "local", "all"):
             self.moduleSelector.addItem(m)
         self.moduleSelector.setFixedWidth(160)
         self.moduleSelector.currentTextChanged.connect(lambda t: setattr(self, 'current_module', t))
