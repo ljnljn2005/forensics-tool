@@ -12,3 +12,4 @@ run_log.txt
 target/
 patch_*.py
 settings/
+.gitignore
