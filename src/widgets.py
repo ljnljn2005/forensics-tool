@@ -1,9 +1,10 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QListWidgetItem, QDialog
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QListWidgetItem, QDialog, QListWidget, QMenu
 from PySide6.QtCore import Qt, QSize, QThread, Signal
+from PySide6.QtGui import QAction
 from PySide6.QtGui import QFont, QTextDocument, QTextCursor
 from qfluentwidgets import LineEdit, PushButton, TextEdit, SubtitleLabel, BodyLabel, ListWidget, PlainTextEdit, PrimaryPushButton, TransparentToolButton, FluentIcon, ComboBox
 from .constants import get_app_proxy
-import os, json
+import os, json, sys
 
 
 class SearchableTextEdit(QWidget):
@@ -80,13 +81,35 @@ class CommandBlockWidget(QWidget):
         self.cmdEdit.setPlaceholderText("命令 / 文件绝对路径")
         self.cmdEdit.setText(cmd)
 
+        # browse directory button to show files when cmd is a directory
+        from qfluentwidgets import PushButton
+        self.browseBtn = PushButton("浏览", self)
+        self.browseBtn.setFixedWidth(60)
+        def on_browse():
+            path = self.cmdEdit.text().strip()
+            if not path:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.info("路径为空", "请在命令/路径栏填写目录路径。", parent=self, position=InfoBarPosition.TOP)
+                return
+            # expand user vars
+            path_expanded = os.path.expanduser(os.path.expandvars(path))
+            if os.path.isdir(path_expanded):
+                dlg = FileListDialog(self, path_expanded)
+                dlg.exec()
+            else:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.warning("不是目录", f"路径不是有效目录: {path}", parent=self, position=InfoBarPosition.TOP)
+
+        self.browseBtn.clicked.connect(on_browse)
+
         self.delBtn = TransparentToolButton(FluentIcon.DELETE, self)
         if del_callback:
             self.delBtn.clicked.connect(del_callback)
 
-        # layout: title + command + delete
+        # layout: title + command + browse + delete
         layout.addWidget(self.nameEdit, 1)
         layout.addWidget(self.cmdEdit, 2)
+        layout.addWidget(self.browseBtn)
         layout.addWidget(self.delBtn)
 
         if data_changed_callback:
@@ -177,6 +200,188 @@ class GitLogDialog(QDialog):
 
     def upload_finished(self):
         self.closeBtn.setEnabled(True)
+
+
+class FileListDialog(QDialog):
+    def __init__(self, parent=None, dirpath=None):
+        super().__init__(parent)
+        self.setWindowTitle("目录文件浏览")
+        self.resize(600, 400)
+        layout = QVBoxLayout(self)
+        # dirpath: normal filesystem dir
+        # archive_base + members: for archive listing mode
+        self.dirpath = dirpath or ''
+        self.archive_base = None
+        self.archive_member_prefix = None
+        self.archive_members = None
+        self.listWidget = QListWidget(self)
+        self.listWidget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.listWidget.customContextMenuRequested.connect(self._on_context_menu)
+        layout.addWidget(self.listWidget)
+
+        btnLayout = QHBoxLayout()
+        self.closeBtn = PrimaryPushButton("关闭", self)
+        self.closeBtn.clicked.connect(self.accept)
+        btnLayout.addStretch(1)
+        btnLayout.addWidget(self.closeBtn)
+        layout.addLayout(btnLayout)
+
+        self.populate()
+        self.listWidget.itemDoubleClicked.connect(self._on_open_default)
+
+    def populate(self):
+        self.listWidget.clear()
+        # archive mode
+        if self.archive_base and self.archive_members is not None:
+            for m in self.archive_members:
+                display = m
+                self.listWidget.addItem(display)
+            return
+        # normal filesystem mode
+        try:
+            entries = os.listdir(self.dirpath)
+        except Exception as e:
+            self.listWidget.addItem(f"无法列目录: {e}")
+            return
+        # show files and directories
+        for name in sorted(entries):
+            full = os.path.join(self.dirpath, name)
+            self.listWidget.addItem(full)
+
+    def _on_context_menu(self, pos):
+        item = self.listWidget.itemAt(pos)
+        if not item:
+            return
+        path = item.text()
+        menu = QMenu(self)
+        open_action = QAction("使用系统默认程序打开", self)
+        reveal_action = QAction("在资源管理器中打开所在文件夹", self)
+        menu.addAction(open_action)
+        menu.addAction(reveal_action)
+
+        def do_open():
+            try:
+                # archive mode: if archive_base set and path is a member name, extract
+                if self.archive_base and self.archive_members is not None:
+                    member = path
+                    import tempfile
+                    try:
+                        if tarfile.is_tarfile(self.archive_base):
+                            with tarfile.open(self.archive_base, 'r') as tf:
+                                fobj = tf.extractfile(os.path.join(self.archive_member_prefix or '', member))
+                                if not fobj:
+                                    raise RuntimeError('无法从归档中读取成员')
+                                data = fobj.read()
+                        elif zipfile.is_zipfile(self.archive_base):
+                            with zipfile.ZipFile(self.archive_base, 'r') as zf:
+                                data = zf.read(os.path.join(self.archive_member_prefix or '', member))
+                        else:
+                            raise RuntimeError('未知归档格式')
+                        suffix = os.path.splitext(member)[1] or ''
+                        tf = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                        tf.write(data)
+                        tf.flush()
+                        tf.close()
+                        if os.name == 'nt':
+                            os.startfile(tf.name)
+                        else:
+                            import subprocess
+                            if sys.platform == 'darwin':
+                                subprocess.Popen(['open', tf.name])
+                            else:
+                                subprocess.Popen(['xdg-open', tf.name])
+                        return
+                    except Exception as e:
+                        from qfluentwidgets import InfoBar, InfoBarPosition
+                        InfoBar.warning("打开失败", str(e), parent=self, position=InfoBarPosition.TOP)
+                        return
+                # filesystem mode
+                if os.name == 'nt':
+                    os.startfile(path)
+                else:
+                    import subprocess
+                    if sys.platform == 'darwin':
+                        subprocess.Popen(['open', path])
+                    else:
+                        subprocess.Popen(['xdg-open', path])
+            except Exception as e:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.warning("打开失败", str(e), parent=self, position=InfoBarPosition.TOP)
+
+        def do_reveal():
+            try:
+                if os.name == 'nt':
+                    # explorer /select,<path>
+                    import subprocess
+                    subprocess.Popen(['explorer', '/select,' + os.path.normpath(path)])
+                else:
+                    import subprocess
+                    folder = os.path.dirname(path) or self.dirpath
+                    if sys.platform == 'darwin':
+                        subprocess.Popen(['open', folder])
+                    else:
+                        subprocess.Popen(['xdg-open', folder])
+            except Exception as e:
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.warning("操作失败", str(e), parent=self, position=InfoBarPosition.TOP)
+
+        open_action.triggered.connect(do_open)
+        reveal_action.triggered.connect(do_reveal)
+        menu.exec(self.listWidget.mapToGlobal(pos))
+
+    def _on_open_default(self, item):
+        # on double-click use the same open logic
+        # itemDoubleClicked provides an item, but _on_context_menu expects a QPoint; instead reuse do_open by calling it directly
+        try:
+            path = item.text()
+            # create a fake item and call open code
+            # reuse open_action behavior
+            if self.archive_base and self.archive_members is not None:
+                # call do_open logic: extract and open
+                member = path
+                import tempfile
+                try:
+                    if tarfile.is_tarfile(self.archive_base):
+                        with tarfile.open(self.archive_base, 'r') as tf:
+                            fobj = tf.extractfile(os.path.join(self.archive_member_prefix or '', member))
+                            if not fobj:
+                                raise RuntimeError('无法从归档中读取成员')
+                            data = fobj.read()
+                    elif zipfile.is_zipfile(self.archive_base):
+                        with zipfile.ZipFile(self.archive_base, 'r') as zf:
+                            data = zf.read(os.path.join(self.archive_member_prefix or '', member))
+                    else:
+                        raise RuntimeError('未知归档格式')
+                    suffix = os.path.splitext(member)[1] or ''
+                    tf = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                    tf.write(data)
+                    tf.flush()
+                    tf.close()
+                    if os.name == 'nt':
+                        os.startfile(tf.name)
+                    else:
+                        import subprocess
+                        if sys.platform == 'darwin':
+                            subprocess.Popen(['open', tf.name])
+                        else:
+                            subprocess.Popen(['xdg-open', tf.name])
+                    return
+                except Exception as e:
+                    from qfluentwidgets import InfoBar, InfoBarPosition
+                    InfoBar.warning("打开失败", str(e), parent=self, position=InfoBarPosition.TOP)
+                    return
+            # filesystem mode
+            if os.name == 'nt':
+                os.startfile(path)
+            else:
+                import subprocess
+                if sys.platform == 'darwin':
+                    subprocess.Popen(['open', path])
+                else:
+                    subprocess.Popen(['xdg-open', path])
+        except Exception as e:
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            InfoBar.warning("打开失败", str(e), parent=self, position=InfoBarPosition.TOP)
 
 
 class CommandRunnerThread(QThread):

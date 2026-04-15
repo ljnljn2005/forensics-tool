@@ -2,7 +2,7 @@ import os
 import json
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QDialog
 from PySide6.QtCore import Qt
-from qfluentwidgets import SubtitleLabel, LineEdit, PushButton, SegmentedWidget, ListWidget, BodyLabel, PrimaryPushButton
+from qfluentwidgets import SubtitleLabel, LineEdit, PushButton, SegmentedWidget, ListWidget, BodyLabel, PrimaryPushButton, ComboBox
 from .constants import PLUGINS_DIR, get_app_settings
 from .widgets import BlockListWidget, GitLogDialog, UploadWorker
 
@@ -100,6 +100,19 @@ class PluginEditorInterface(QWidget):
         self.descEdit.setPlaceholderText("插件简要描述")
         self.descLayout.addWidget(self.descEdit)
         self.rightPanel.addLayout(self.descLayout)
+
+        # module / platform selector for the plugin (linux, android, ...)
+        self.moduleLayout = QHBoxLayout()
+        self.moduleLayout.addWidget(BodyLabel("目标平台: "))
+        self.moduleSelector = ComboBox(self)
+        # common platforms
+        for m in ("linux", "android", "windows", "macos", "all"):
+            self.moduleSelector.addItem(m)
+        self.moduleSelector.setFixedWidth(160)
+        self.moduleSelector.currentTextChanged.connect(lambda t: setattr(self, 'current_module', t))
+        self.moduleLayout.addWidget(self.moduleSelector)
+        self.moduleLayout.addStretch(1)
+        self.rightPanel.addLayout(self.moduleLayout)
 
         self.sshBlockList = BlockListWidget(self)
         self.fileBlockList = BlockListWidget(self)
@@ -218,6 +231,13 @@ class PluginEditorInterface(QWidget):
         self.sshBlockList.clear_blocks()
         self.fileBlockList.clear_blocks()
         self.add_command_block()
+        # reset module selector to default
+        if hasattr(self, 'moduleSelector'):
+            try:
+                self.moduleSelector.setCurrentText('linux')
+            except Exception:
+                pass
+        self.current_module = 'linux'
 
     def on_editor_type_changed(self, key):
         self.current_editor_type = key
@@ -248,7 +268,7 @@ class PluginEditorInterface(QWidget):
             name = ""
         if isinstance(cmd, bool):
             cmd = ""
-        module = getattr(self, 'current_module', 'linux')
+        module = getattr(self, 'current_module', self.moduleSelector.currentText() if hasattr(self, 'moduleSelector') else 'linux')
         self.sshBlockList.add_block(name, cmd, "SSH命令", module, "")
 
     def add_file_block(self, name="", cmd=""):
@@ -256,7 +276,7 @@ class PluginEditorInterface(QWidget):
             name = ""
         if isinstance(cmd, bool):
             cmd = ""
-        module = getattr(self, 'current_module', 'linux')
+        module = getattr(self, 'current_module', self.moduleSelector.currentText() if hasattr(self, 'moduleSelector') else 'linux')
         self.fileBlockList.add_block(name, cmd, "文件提取", module, "")
 
     def on_plugin_selected(self, item):
@@ -268,6 +288,12 @@ class PluginEditorInterface(QWidget):
         if isinstance(pdata, dict):
             self.authorEdit.setText(pdata.get('author', ''))
             self.descEdit.setText(pdata.get('description', ''))
+            mod = pdata.get('module', None)
+            if mod and hasattr(self, 'moduleSelector'):
+                try:
+                    self.moduleSelector.setCurrentText(mod)
+                except Exception:
+                    pass
         self.sshBlockList.clear_blocks()
         self.fileBlockList.clear_blocks()
         p_data = self.plugins_data.get(name, [])
@@ -287,10 +313,13 @@ class PluginEditorInterface(QWidget):
         if not name: return
         ssh_cmds = self.sshBlockList.get_all_blocks()
         file_cmds = self.fileBlockList.get_all_blocks()
+        # include chosen module as plugin-level metadata
+        plugin_module = getattr(self, 'current_module', self.moduleSelector.currentText() if hasattr(self, 'moduleSelector') else 'linux')
         self.plugins_data[name] = {
             "name": name,
             "author": self.authorEdit.text().strip(),
             "description": self.descEdit.text().strip(),
+            "module": plugin_module,
             "blocks": ssh_cmds + file_cmds
         }
         self._save_to_file()

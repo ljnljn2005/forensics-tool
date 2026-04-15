@@ -534,10 +534,12 @@ class LiveSshInterface(QWidget):
                     stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
                     out = stdout.read().decode('utf-8', errors='replace')
                     err = stderr.read().decode('utf-8', errors='replace')
-                    content = out if out else err
+                    body = out if out else err
+                    # 在结果框中第一行显示将要执行的命令
+                    content = f"执行命令: {cmd}\n\n{body}"
                     executed += 1
                 except Exception as e:
-                    content = f"[执行命令失败: {e}]"
+                    content = f"执行命令: {cmd}\n\n[执行命令失败: {e}]"
 
                 # add a new tab to display result (route key unique)
                 route_key = f"{plugin_name}-{title}" if current_item else title or 'output'
