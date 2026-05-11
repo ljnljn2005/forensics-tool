@@ -1,6 +1,7 @@
- .venv/
+.venv/
 __pycache__/
 *.pyc
+.codex/
 .vscode/
 .idea/
 downloads/
@@ -10,6 +11,7 @@ plugins/
 *.zip
 run_log.txt
 target/
+tmp*/
 patch_*.py
 settings/
 .gitignore
