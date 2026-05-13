@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.routes.ai_analysis import router as ai_analysis_router
 from backend.app.api.routes.android_auto_forensics import router as android_auto_forensics_router
+from backend.app.api.routes.auto_forensics import router as auto_forensics_router
 from backend.app.api.routes.cases import router as cases_router
 from backend.app.api.routes.db_viewer import router as db_viewer_router
 from backend.app.api.routes.extractor import router as extractor_router
@@ -28,6 +29,7 @@ app.include_router(health_router)
 app.include_router(cases_router)
 app.include_router(ai_analysis_router)
 app.include_router(android_auto_forensics_router)
+app.include_router(auto_forensics_router)
 app.include_router(db_viewer_router)
 app.include_router(file_browser_router)
 app.include_router(registry_scan_router)

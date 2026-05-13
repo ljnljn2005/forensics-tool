@@ -5,8 +5,14 @@ import { deletePlugin, loadPlugins, savePlugin, type PluginBlock, type PluginDef
 type PluginEditorMode = "local" | "remote" | "auto-android";
 
 type PluginEditorPageProps = {
-  mode: PluginEditorMode;
+  mode?: PluginEditorMode;
 };
+
+const MODE_OPTIONS: { value: PluginEditorMode; label: string }[] = [
+  { value: "local", label: "本地取证" },
+  { value: "remote", label: "远程取证" },
+  { value: "auto-android", label: "自动取证" },
+];
 
 function editorDefaults(mode: PluginEditorMode): { module: string; blockType: string; title: string; packageAware: boolean } {
   switch (mode) {
@@ -77,7 +83,17 @@ function normalizeForMode(plugin: PluginDefinition, mode: PluginEditorMode): Plu
   };
 }
 
-export default function PluginEditorPage({ mode }: PluginEditorPageProps) {
+const MODULE_FILTER_OPTIONS = [
+  { value: "", label: "全部平台" },
+  { value: "windows", label: "Windows" },
+  { value: "linux", label: "Linux" },
+  { value: "android", label: "Android" },
+  { value: "ios", label: "iOS" },
+];
+
+export default function PluginEditorPage({ mode: initialMode = "local" }: PluginEditorPageProps) {
+  const [mode, setMode] = useState<PluginEditorMode>(initialMode);
+  const [moduleFilter, setModuleFilter] = useState("");
   const defaults = useMemo(() => editorDefaults(mode), [mode]);
   const [plugins, setPlugins] = useState<PluginDefinition[]>([]);
   const [editing, setEditing] = useState<PluginDefinition>(createEmptyPlugin(mode));
@@ -86,7 +102,8 @@ export default function PluginEditorPage({ mode }: PluginEditorPageProps) {
   const [error, setError] = useState("");
 
   async function refresh() {
-    const payload = await loadPlugins();
+    const filterModule = moduleFilter || undefined;
+    const payload = await loadPlugins(filterModule);
     const filtered = payload.plugins
       .map((plugin) => normalizeForMode(plugin, mode))
       .filter((plugin) => plugin.blocks.length > 0 || mode !== "auto-android");
@@ -97,7 +114,7 @@ export default function PluginEditorPage({ mode }: PluginEditorPageProps) {
     setEditing(createEmptyPlugin(mode));
     setPackageNamesText("");
     refresh().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "插件加载失败"));
-  }, [mode]);
+  }, [mode, moduleFilter]);
 
   useEffect(() => {
     setPackageNamesText((editing.package_names ?? []).join("\n"));
@@ -173,6 +190,42 @@ export default function PluginEditorPage({ mode }: PluginEditorPageProps) {
     <div className="page-stack">
       {message ? <p className="success-text">{message}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
+
+      <section className="panel toolbar-panel">
+        <label className="field-label">
+          编辑模式
+          <select
+            value={mode}
+            onChange={(event) => {
+              const newMode = event.target.value as PluginEditorMode;
+              setMode(newMode);
+              setEditing(createEmptyPlugin(newMode));
+              setPackageNamesText("");
+              setMessage("");
+              setError("");
+            }}
+          >
+            {MODE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field-label">
+          平台筛选
+          <select
+            value={moduleFilter}
+            onChange={(event) => {
+              setModuleFilter(event.target.value);
+              setMessage("");
+              setError("");
+            }}
+          >
+            {MODULE_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </label>
+      </section>
 
       <div className="three-column-layout">
         <section className="panel">

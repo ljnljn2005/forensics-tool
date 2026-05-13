@@ -9,8 +9,8 @@ router = APIRouter()
 
 
 @router.get("/api/plugins")
-def plugins_list():
-    return list_plugins()
+def plugins_list(module: str = ""):
+    return list_plugins(module=module)
 
 
 @router.post("/api/plugins")

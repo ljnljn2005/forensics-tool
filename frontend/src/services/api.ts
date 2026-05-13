@@ -399,6 +399,59 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export type AutoForensicsEntry = {
+  group: string;
+  name: string;
+  cmd: string;
+  type: string;
+  module: string;
+  resolved_path?: string;
+  result?: string;
+};
+
+export type AutoForensicsGroup = {
+  group_name: string;
+  entries: AutoForensicsEntry[];
+};
+
+export type AutoForensicsResult = {
+  mapping_path: string;
+  module: string;
+  matched_groups: AutoForensicsGroup[];
+  total_entries: number;
+  has_registry?: boolean;
+  has_logs?: boolean;
+  phase?: string;
+};
+
+export function scanAutoForensics(mappingPath: string, module: string) {
+  return request<AutoForensicsResult>("/api/auto-forensics/scan", {
+    method: "POST",
+    body: JSON.stringify({ mapping_path: mappingPath, module })
+  });
+}
+
+export function scanAutoForensicsSystemInfo(mappingPath: string) {
+  return request<AutoForensicsResult>("/api/auto-forensics/scan-system-info", {
+    method: "POST",
+    body: JSON.stringify({ mapping_path: mappingPath })
+  });
+}
+
+export function scanAutoForensicsRegistry(mappingPath: string) {
+  return request<AutoForensicsResult>("/api/auto-forensics/scan-registry", {
+    method: "POST",
+    body: JSON.stringify({ mapping_path: mappingPath })
+  });
+}
+
+export function scanAutoForensicsLogs(mappingPath: string) {
+  return request<AutoForensicsResult>("/api/auto-forensics/scan-logs", {
+    method: "POST",
+    body: JSON.stringify({ mapping_path: mappingPath })
+  });
+}
+
 export function scanAndroidAutoForensics(mappingPath: string, entries: AndroidAutoForensicsEntry[]) {
   return request<AndroidAutoForensicsResult>("/api/android/auto-forensics/scan", {
     method: "POST",
@@ -585,8 +638,9 @@ export function saveSettings(settings: AppSettings) {
   });
 }
 
-export function loadPlugins() {
-  return request<PluginListResult>("/api/plugins");
+export function loadPlugins(module?: string) {
+  const params = module ? `?module=${encodeURIComponent(module)}` : "";
+  return request<PluginListResult>(`/api/plugins${params}`);
 }
 
 export function savePlugin(plugin: PluginDefinition) {

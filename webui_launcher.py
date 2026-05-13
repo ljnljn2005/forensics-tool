@@ -102,7 +102,7 @@ def preferred_webview_gui() -> str | None:
 
 
 def should_enable_debug_context_menu() -> bool:
-    return os.name == "nt"
+    return False
 
 
 def import_webview_module():

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import AppShell, { type NavGroup } from "./layout/AppShell";
 import AiAnalysisPage from "./pages/AiAnalysisPage";
 import AndroidAutoForensicsPage from "./pages/AndroidAutoForensicsPage";
+import AutoForensicsPage from "./pages/AutoForensicsPage";
 import DatabaseViewerPage from "./pages/DatabaseViewerPage";
 import ExtractorWorkbenchPage from "./pages/ExtractorWorkbenchPage";
 import GlobalSearchPage from "./pages/GlobalSearchPage";
@@ -23,34 +24,59 @@ const navGroups: NavGroup[] = [
     title: "Windows 取证",
     icon: "🪟",
     items: [
-      { key: "windows-local", label: "本地取证", icon: "📁" },
-      { key: "windows-registry", label: "注册表取证", icon: "🧾" },
-      { key: "windows-memory", label: "内存取证", icon: "🧠" },
-      { key: "windows-logs", label: "日志分析", icon: "📜" },
+      { key: "windows-auto", label: "自动取证", icon: "⚙️" },
+      {
+        key: "windows-manual", label: "手动取证", icon: "🔧",
+        children: [
+          { key: "windows-local", label: "本地取证", icon: "📁" },
+          { key: "windows-registry", label: "注册表取证", icon: "🧾" },
+          { key: "windows-memory", label: "内存取证", icon: "🧠" },
+          { key: "windows-logs", label: "日志分析", icon: "📜" },
+        ],
+      },
     ],
   },
   {
     title: "Linux 取证",
     icon: "🐧",
     items: [
-      { key: "linux-local", label: "本地取证", icon: "📁" },
-      { key: "linux-ssh", label: "SSH 远程取证", icon: "🖧" },
-      { key: "linux-memory", label: "内存取证", icon: "🧠" },
-      { key: "linux-logs", label: "日志分析", icon: "📜" },
+      { key: "linux-auto", label: "自动取证", icon: "⚙️" },
+      {
+        key: "linux-manual", label: "手动取证", icon: "🔧",
+        children: [
+          { key: "linux-local", label: "本地取证", icon: "📁" },
+          { key: "linux-ssh", label: "SSH 远程取证", icon: "🖧" },
+          { key: "linux-memory", label: "内存取证", icon: "🧠" },
+          { key: "linux-logs", label: "日志分析", icon: "📜" },
+        ],
+      },
     ],
   },
   {
     title: "Android 取证",
     icon: "🤖",
     items: [
-      { key: "android-local", label: "本地取证", icon: "📁" },
       { key: "android-auto", label: "自动取证", icon: "⚙️" },
+      {
+        key: "android-manual", label: "手动取证", icon: "🔧",
+        children: [
+          { key: "android-local", label: "本地取证", icon: "📁" },
+        ],
+      },
     ],
   },
   {
     title: "iOS 取证",
     icon: "🍎",
-    items: [{ key: "ios-local", label: "本地取证", icon: "📁" }],
+    items: [
+      { key: "ios-auto", label: "自动取证", icon: "⚙️" },
+      {
+        key: "ios-manual", label: "手动取证", icon: "🔧",
+        children: [
+          { key: "ios-local", label: "本地取证", icon: "📁" },
+        ],
+      },
+    ],
   },
   {
     title: "插件市场",
@@ -61,14 +87,7 @@ const navGroups: NavGroup[] = [
     title: "插件编辑",
     icon: "✏️",
     items: [
-      { key: "plugin-editor-local", label: "本地取证", icon: "📁" },
-      { key: "plugin-editor-remote", label: "远程取证", icon: "🖧" },
-      {
-        key: "plugin-editor-auto",
-        label: "自动取证",
-        icon: "⚙️",
-        children: [{ key: "plugin-editor-auto-android", label: "Android 取证", icon: "🤖" }],
-      },
+      { key: "plugin-editor", label: "插件编辑器", icon: "✏️" },
     ],
   },
   {
@@ -90,8 +109,14 @@ const navGroups: NavGroup[] = [
 
 function resolvePage(activeKey: string) {
   switch (activeKey) {
+    case "windows-auto":
+      return { title: "Windows 自动取证", subtitle: "自动提取 Windows 系统关键证据。", content: <AutoForensicsPage module="windows" /> };
+    case "linux-auto":
+      return { title: "Linux 自动取证", subtitle: "自动提取 Linux 系统关键证据。", content: <AutoForensicsPage module="linux" /> };
     case "android-auto":
       return { title: "Android 自动取证", subtitle: "扫描应用并按插件规则自动分析。", content: <AndroidAutoForensicsPage /> };
+    case "ios-auto":
+      return { title: "iOS 自动取证", subtitle: "自动提取 iOS 系统关键证据。", content: <AutoForensicsPage module="ios" /> };
     case "windows-registry":
       return { title: "Windows 注册表取证", subtitle: "读取离线 hive 并执行注册表分析。", content: <RegistryScanPage /> };
     case "windows-logs":
@@ -116,12 +141,8 @@ function resolvePage(activeKey: string) {
       return { title: "iOS 本地取证", subtitle: "iOS 映射路径提取工作台。", content: <ExtractorWorkbenchPage module="ios" /> };
     case "plugin-market":
       return { title: "插件市场", subtitle: "浏览和安装插件。", content: <PluginMarketPage /> };
-    case "plugin-editor-local":
-      return { title: "插件编辑 / 本地取证", subtitle: "制作本地取证插件。", content: <PluginEditorPage mode="local" /> };
-    case "plugin-editor-remote":
-      return { title: "插件编辑 / 远程取证", subtitle: "制作远程取证插件。", content: <PluginEditorPage mode="remote" /> };
-    case "plugin-editor-auto-android":
-      return { title: "插件编辑 / 自动取证 / Android", subtitle: "制作 Android 自动取证插件。", content: <PluginEditorPage mode="auto-android" /> };
+    case "plugin-editor":
+      return { title: "插件编辑器", subtitle: "制作和管理取证插件。", content: <PluginEditorPage /> };
     case "toolbox-jigsaw":
       return { title: "工具箱", subtitle: "统一集成的取证辅助工具。", content: <ToolboxPage /> };
     case "ai-analysis":

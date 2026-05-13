@@ -730,22 +730,16 @@ pre {
 
 .android-auto-sidebar {
   display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 12px;
-  padding: 14px;
-}
-
-.android-auto-case-picker input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  padding: 10px 8px;
+  min-height: 0;
 }
 
 .android-auto-tree {
   display: grid;
-  gap: 12px;
-  overflow: auto;
+  gap: 8px;
+  align-content: start;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .android-auto-tree-root,
@@ -761,6 +755,18 @@ pre {
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+
+.android-auto-tree-root {
+  padding: 6px 10px;
+}
+
+.android-auto-tree-root .android-auto-tree-copy {
+  gap: 0;
+}
+
+.android-auto-tree-root .android-auto-tree-copy span {
+  font-size: 0.75rem;
 }
 
 .android-auto-tree-root:hover,
@@ -880,4 +886,28 @@ pre {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.sysinfo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.sysinfo-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.sysinfo-table td:first-child {
+  white-space: nowrap;
+  color: var(--text-soft);
+  font-weight: 600;
+  width: 1%;
+  padding-right: 16px;
+}
+
+.sysinfo-table tr:last-child td {
+  border-bottom: none;
 }

@@ -114,7 +114,7 @@ def _load_local_plugin_files() -> dict[str, dict]:
     return plugins
 
 
-def list_plugins() -> dict:
+def list_plugins(module: str = "") -> dict:
     plugins: dict[str, dict] = {}
     plugins.update(_load_local_plugin_files())
     for name, payload in _load_plugins().items():
@@ -122,7 +122,20 @@ def list_plugins() -> dict:
             plugin = normalize_plugin(payload, fallback_name=name)
             if plugin["name"]:
                 plugins[plugin["name"]] = plugin
-    return {"plugins": sorted(plugins.values(), key=lambda item: item["name"].lower())}
+    all_plugins = sorted(plugins.values(), key=lambda item: item["name"].lower())
+
+    if module:
+        module_lower = module.strip().lower()
+        filtered = []
+        for p in all_plugins:
+            if any(
+                str(b.get("module", "")).lower() == module_lower
+                for b in p.get("blocks", [])
+            ):
+                filtered.append(p)
+        return {"plugins": filtered}
+
+    return {"plugins": all_plugins}
 
 
 def list_android_auto_plugins() -> list[dict]:
