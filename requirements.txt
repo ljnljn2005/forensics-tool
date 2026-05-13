@@ -1,3 +1,8 @@
-PySide6
 qfluentwidgets
 paramiko
+fastapi
+uvicorn
+Pillow
+numpy
+opencv-python-headless
+pywebview

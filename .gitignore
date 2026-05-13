@@ -4,6 +4,10 @@ __pycache__/
 .codex/
 .vscode/
 .idea/
+frontend/node_modules/
+frontend/dist/
+frontend/.npm-cache/
+frontend/*.tsbuildinfo
 downloads/
 settings/app_settings.json
 venv/
