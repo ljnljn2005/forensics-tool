@@ -10,6 +10,8 @@ from pathlib import Path
 
 import uvicorn
 
+from src.activation import require_activation
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
@@ -179,6 +181,7 @@ class BackendServer:
 
 
 def launch_webui() -> int:
+    require_activation()
     webview = import_webview_module()
     ensure_frontend_build(str(FRONTEND_DIR))
 

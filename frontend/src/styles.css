@@ -512,6 +512,53 @@ textarea {
   color: var(--text-faint);
 }
 
+.settings-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-info-grid > div {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.settings-info-grid strong,
+.settings-credit-card span {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.settings-credit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.settings-credit-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+  color: var(--text-main);
+  text-decoration: none;
+}
+
+.settings-credit-card:hover {
+  border-color: var(--accent);
+}
+
+.settings-credit-card small {
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
 .stat-line {
   margin-bottom: 10px;
   color: var(--text-soft);

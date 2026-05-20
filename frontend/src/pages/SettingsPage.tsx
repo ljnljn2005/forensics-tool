@@ -2,6 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 
 import { loadSettings, saveSettings, type AppSettings } from "../services/api";
 
+const openSourceAcknowledgements = [
+  { name: "FastWLAT", url: "https://github.com/vam876/FastWLAT", usage: "Web 日志分析能力参考" },
+  { name: "FastWinLog", url: "https://github.com/vam876/FastWinLog", usage: "Windows 日志分析能力参考" },
+  { name: "FastLinLog", url: "https://github.com/vam876/FastLinLog", usage: "Linux 日志分析能力参考" },
+  { name: "ForensicsTool", url: "https://github.com/WXjzcccc/ForensicsTool", usage: "取证小工具能力参考" },
+  { name: "LovelyHashcat", url: "https://github.com/Tokeii0/LovelyHashcat", usage: "Hashcat 工作台能力参考" },
+  { name: "hashcat", url: "https://github.com/hashcat/hashcat", usage: "哈希破解执行引擎" },
+  { name: "CyberChef", url: "https://github.com/gchq/CyberChef", usage: "数据转换工具" },
+  { name: "jadx", url: "https://github.com/skylot/jadx", usage: "APK 反编译与分析工具" },
+  { name: "LovelyMem", url: "https://github.com/Tokeii0/LovelyMem", usage: "内存取证能力参考" },
+  { name: "西电取证 Wiki", url: "https://forensics.xidian.edu.cn/wiki/writeups", usage: "取证知识与题解参考" }
+];
+
 function rootsToText(settings: AppSettings) {
   return (settings.android_system_roots ?? []).join("\n");
 }
@@ -98,6 +111,37 @@ export default function SettingsPage() {
           {savedMessage ? <span className="success-text">{savedMessage}</span> : null}
         </div>
         {error ? <p className="error-text">{error}</p> : null}
+      </section>
+
+      <section className="panel">
+        <h2>关于</h2>
+        <div className="settings-info-grid">
+          <div>
+            <strong>应用名称</strong>
+            <span>Forensics Tool WebUI</span>
+          </div>
+          <div>
+            <strong>版本</strong>
+            <span>v1.2</span>
+          </div>
+          <div>
+            <strong>激活说明</strong>
+            <span>如需激活码，请联系作者并提供软件提示的机器码。</span>
+          </div>
+          <div>
+            <strong>运行模式</strong>
+            <span>本地 Python/WebView 或打包 EXE</span>
+          </div>
+        </div>
+        <div className="settings-credit-grid top-space">
+          {openSourceAcknowledgements.map((project) => (
+            <a className="settings-credit-card" href={project.url} key={project.name} rel="noreferrer" target="_blank">
+              <span>{project.usage}</span>
+              <strong>{project.name}</strong>
+              <small>{project.url}</small>
+            </a>
+          ))}
+        </div>
       </section>
     </div>
   );
